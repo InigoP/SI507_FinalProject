@@ -5,7 +5,6 @@ import pandas as pd
 import sqlite3
 from scipy import stats
 from sklearn.decomposition import PCA
-from sklearn import datasets
 from sklearn.preprocessing import StandardScaler
 from numpy import eye, asarray, dot, sum, diag
 from numpy.linalg import svd
@@ -15,7 +14,9 @@ import webbrowser
 import sqlalchemy
 import altair as alt
 import csv
-from unicodedata import normalize
+import geoplot as gplt
+import matplotlib.pyplot as plt
+
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -183,6 +184,7 @@ def percentileTable(in_data, fields):
     p_fields = ["P_" + field for field in fields]
 
     return pd.DataFrame(in_data, columns=p_fields)
+
 def PCA_kaiser(in_data):
     """This function performs a PCA for an input dataset with multiple
     independent variables. The Kaiser rule is applied to the resulting
@@ -315,45 +317,29 @@ if __name__ == "__main__":
     df = aggregate_data('ReceivePublicAssistance', df, 2)
     df = aggregate_data('SingleParentHouseholds', df, 3)
     df = aggregate_data('NoVehicleAvailable', df, 2)
-
+    # print(df)
     fields = ['TotalFemalePopulation','UnderAge10','OverAge64','WithADisability','PovertyStatus','Unemployment',
     'ParttimeWorkers','Renters','ReceivePublicAssistance','SingleParentHouseholds','NoVehicleAvailable']
     percentile_df = percentileTable(df, fields)
     in_PCA = PCA_kaiser(percentile_df)
     PCA_rotated = varimax(in_PCA)
     f1 = factorLoadings(PCA_rotated, percentile_df)
+    PCA_rotated = PCA_rotated * -1
+
     percentile_df['SocialVulnerabilityScore'] = PCA_rotated
     percentile_df['Name'] = df['NAME']
     percentile_df['State'] = df['state']
     percentile_df['FIPS_Code'] = df['county']
     percentile_df['Name'] = percentile_df['Name'].str.replace(r' Municipio, Puerto Rico$','')
 
+    # print(percentile_df)
     counties = gpd.read_file(r'C:\python_workfolder\si507\final_project\tl_2016_us_county.shp', encoding= 'UTF-8')
     pr = counties[counties.STATEFP == '72']
 
-    # table = pr.merge(percentile_df[0], how = "left", left_on = ['NAME'], right_on=['Name'])
-    # print(percentile_df.Name)
     conn = sqlite3.connect('project_data.sqlite')
     percentile_df.to_sql('CENSUS', conn, if_exists = 'replace')
-    # coffee_municipality.to_sql('HUB', conn, if_exists = 'replace')
 
     c = conn.cursor()
-    create_temp_census_table = '''
-        CREATE TEMPORARY TABLE CENSUS_backup(P_TotalFemalePopulation, P_UnderAge10,P_OverAge64,P_WithADisability,P_PovertyStatus,P_Unemployment,
-        P_ParttimeWorkers,P_Renters,P_ReceivePublicAssistance,P_SingleParentHouseholds, P_NoVehicleAvailable, SocialVulnerabilityScore, Name, State, FIPS_Code);
-    '''
-    # create_temp_hub_table = '''
-    #     CREATE TEMPORARY TABLE HUB_backup(Municipality, Production, Production_in_pounds, Production_in_kilograms, Planted_square_feet, Percentage_Harvested);
-    # '''
-
-    insert_backup_census_val = '''
-        INSERT INTO CENSUS_backup SELECT P_TotalFemalePopulation, P_UnderAge10,P_OverAge64,P_WithADisability,P_PovertyStatus,P_Unemployment,
-        P_ParttimeWorkers,P_Renters,P_ReceivePublicAssistance,P_SingleParentHouseholds, P_NoVehicleAvailable, SocialVulnerabilityScore, Name, State, FIPS_Code FROM CENSUS;
-    '''
-    # insert_backup_hub_val = '''
-    #     INSERT INTO HUB_backup SELECT Municipality, Production, Production_in_pounds, Production_in_kilograms, Planted_square_feet, Percentage_Harvested FROM HUB;
-    # '''
-
     drop_census = '''
         DROP TABLE CENSUS;
     '''
@@ -362,26 +348,6 @@ if __name__ == "__main__":
         DROP TABLE IF EXISTS 'CARRIBEAN_HUB';
     '''
 
-    create_census_table = '''
-        CREATE TABLE IF NOT EXISTS 'CENSUS' (
-        "Id" INTEGER PRIMARY KEY AUTOINCREMENT,
-        "TotalFemalePopulation"   FLOAT NOT NULL,
-        'UnderAge10'    FLOAT NOT NULL,
-        'OverAge64'  FLOAT NOT NULL,
-        'WithADisability'  FLOAT NOT NULL,
-        'PovertyStatus'  FLOAT NOT NULL,
-        'Unemployment'  FLOAT NOT NULL,
-        'ParttimeWorkers'  FLOAT NOT NULL,
-        'Renters'  FLOAT NOT NULL,
-        'ReceivePublicAssistance'  FLOAT NOT NULL,
-        'SingleParentHouseholds'  FLOAT NOT NULL,
-        'NoVehicleAvailable'  FLOAT NOT NULL,
-        'SocialVulnerabilityScore' FLOAT NOT NULL,
-        'Name' TEXT NOT NULL,
-        'State' INTEGER NOT NULL,
-        'FIPS_Code' INTEGER NOT NULL
-        );
-    '''
     create_carribean_hub_table = '''
         CREATE TABLE IF NOT EXISTS "CARRIBEAN_HUB"(
             "Id" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -402,41 +368,18 @@ if __name__ == "__main__":
             "Harvested_square_feet"  FLOAT
         );
     '''
-    insert_census_val = '''
-        INSERT INTO CENSUS SELECT NULL, P_TotalFemalePopulation, P_UnderAge10, P_OverAge64, P_WithADisability, P_PovertyStatus, P_Unemployment, P_ParttimeWorkers,P_Renters,P_ReceivePublicAssistance, P_SingleParentHouseholds,
-         P_NoVehicleAvailable, SocialVulnerabilityScore, Name, State, FIPS_Code FROM CENSUS_backup;
-    '''
-    # insert_hub_val = '''
-    #     INSERT INTO CARRIBEAN_HUB SELECT Municipality, Production, Production_in_pounds, Production_in_kilograms, Planted_square_feet, Percentage_Harvested FROM HUB_backup;
-    # '''
+
     drop_back_up_census = '''
         DROP TABLE CENSUS_backup
     '''
-    # drop_back_up_hub = '''
-    #     DROP TABLE HUB_backup
-    # '''
-    # c.execute(create_temp_census_table)
-    # c.execute(create_temp_hub_table)
 
-    # c.execute(insert_backup_census_val)
-    # c.execute(insert_backup_hub_val)
-
-    # c.execute(drop_census)
     c.execute(drop_hub)
-
-    # c.execute(create_census_table)
     c.execute(create_carribean_hub_table)
-
-    # c.execute(insert_census_val)
-    # c.execute(insert_hub_val)
-
-    # c.execute(drop_back_up_hub)
-    # c.execute(drop_back_up_census)
 
     conn.commit()
     conn.close()
 
-    #def load_hub():
+
     file_contents = open('C:/python_workfolder/si507/final_project/coffee_pr_2016.csv', 'r', encoding='utf-8')
     csv_reader = csv.reader(file_contents)
     next(csv_reader)
@@ -497,42 +440,148 @@ if __name__ == "__main__":
 
     result = cur.execute(inner_join_query).fetchall()
 
-    # print(result)
+
     coffee = pd.read_sql_query(inner_join_query, conn)
-    # print(coffee)
-    # coffee['Production_in_pounds'] = coffee['Production_in_pounds'].astype(str)
-    # coffee['Planted_square_feet']= coffee['Planted_square_feet'].astype(str)
-    # coffee['Harvested_square_feet']= coffee['Harvested_square_feet'].astype(str)
     coffee['Production_in_pounds'] = (coffee['Production_in_pounds'].str.replace(',','')).astype(float)
-    # print(coffee['Production_in_pounds'])
     coffee['Planted_square_feet'] = (coffee['Planted_square_feet'].str.replace(',','').astype(float))
     coffee['Harvested_square_feet'] = (coffee['Harvested_square_feet'].str.replace(',','').astype(float))
-
     coffee = coffee.groupby('Name', as_index=False).sum()
-    print(coffee.head(30))
-    # print(df.head(30))
-    conn.commit()
-    conn.close()
-    # query = c.execute('''
+    coffee['Percentage_Harvested'] = (coffee['Harvested_square_feet'] / coffee['Planted_square_feet'])*100
 
-    # SELECT SocialVulnerabilityScore, Name FROM CENSUS_DATA
-    # ''')
-    # df = pd.read_sql_query("select P_SingleParentHouseholds, Name from CENSUS;", conn)
-    # print(df)
-    #
-    # table = pr.merge(df, how = "left", left_on = ['NAME'], right_on=['Name'])
-    # my_map = folium.Map(location=[18.2208, -66.5901], zoom_start=9)
-    # folium.Choropleth(
-    # geo_data=table,
-    # name='choropleth',
-    # data=table,
-    # columns=['Name', 'P_SingleParentHouseholds'],
-    # key_on='feature.properties.Name',
-    # fill_color='OrRd',
-    # fill_opacity=0.7,
-    # line_opacity=0.2,
-    # legend_name='SingleParentHouseholds'
-    # ).add_to(my_map)
-    # my_map.save(r'C:\python_workfolder\si507\final_project\social_score.html')
-    # webbrowser.open_new_tab(r'C:\python_workfolder\si507\final_project\social_score.html')
-    # HTML('<iframe src=social_score.html width=700 height=450></iframe>')
+    socio_economics_var = ['P_TotalFemalePopulation','P_UnderAge10','P_OverAge64','P_WithADisability','P_PovertyStatus','P_Unemployment',
+    'P_ParttimeWorkers','P_Renters','P_ReceivePublicAssistance','P_SingleParentHouseholds','P_NoVehicleAvailable', 'SocialVulnerabilityScore']
+
+    print("""In 2017, Hurricane Maria struck the United States unincorporated territory of Puerto Rico as a category four hurricane. This project examines some of the socio-economic and agriculture data of Puerto Rico to improve the local smallholder coffee farmer's resilience. The socio-economic data are downloaded from the United States Census Bureau, and the agriculture data are downloaded from the Caribbean Climate Hub. The socio-economic factors are used to create a social vulnerability index to help depict community vulnerability's spatial patterns. Please refer to the document in Github for more information.""")
+
+    print('\nWould you like to view the socio-economics data or agriculture data?')
+    print("\nPress '1' for agriculture data, press '2' for socio-economics data, or'exit' to exit!")
+    user_response = input('\nEnter response:')
+    while user_response != 'exit':
+        if user_response == '1':
+            print('''\nChoose the number for the visualization you'd like to see or "exit" or "back":\n1. Top Coffee Production Municipalities in Puerto Rico 2016\n2. Coffee Harvested vs. Coffee Planted in 2016 \n3. Percentage coffee harvested per municpality in 2016. ''')
+            user_response = input('Enter response:')
+            while user_response != 'back':
+                if user_response == '1':
+                    vis1 = alt.Chart(coffee).transform_window(
+                        rank = 'rank(Production_in_pounds)',
+                        sort = [alt.SortField('Production_in_pounds', order = 'descending')]
+                    ).transform_filter(
+                        (alt.datum.rank <20)
+                    ).mark_bar().encode(
+                        alt.Y('Production_in_pounds:Q', title = 'Coffee Production in pounds'),
+                        alt.X('Name:N', title = 'Municipalities', sort = alt.EncodingSortField(
+                        field = 'rank', order = 'ascending')
+                    )
+                    ).properties(
+                        width = 800,
+                        height = 400
+                    ).encode(
+                        tooltip = [alt.Tooltip('Production_in_pounds:Q', title = 'Production in pounds', format = ',')]
+                    ).properties(
+                        title = 'Top Coffee Production Municipalities in Puerto Rico 2016'
+                    )
+                    vis1.save('vis1.html')
+                    webbrowser.open_new_tab(r'C:\python_workfolder\si507\final_project\vis1.html')
+                    print('''\nChoose another visualization you'd like to see or "exit" or "back":\n1. Top Coffee Production Municipalities in Puerto Rico 2016\n2. Coffee Harvested vs. Coffee Planted in 2016 \n3. Percentage coffee harvested per municpality in 2016. ''')
+                    user_response = input('Enter response:')
+                elif user_response == '2':
+                    vis2 = alt.Chart(coffee).mark_circle().encode(
+                        alt.X('Planted_square_feet:Q', title = 'Planted coffee (square feet)'),
+                        alt.Y('Harvested_square_feet:Q', title = 'Harvested coffee (square feet)'),
+                        size = 'Production_in_pounds:Q'
+                        ).properties(
+                        width = 800,
+                        height = 400,
+                        title = "Planted Coffee vs. Harvested Coffee In Square Feet in 2016"
+                        ).encode(
+                        tooltip = [alt.Tooltip('Name:N'), alt.Tooltip('Harvested_square_feet:Q', title = 'Square Feet Harvested',format = ',')]
+                        )
+                    vis2.save('vis2.html')
+                    webbrowser.open_new_tab(r'C:\python_workfolder\si507\final_project\vis2.html')
+                    print('''\nChoose another visualization you'd like to see or "exit" or "back":\n1. Top Coffee Production Municipalities in Puerto Rico 2016\n2. Coffee Harvested vs. Coffee Planted in 2016 \n3. Percentage coffee harvested per municpality in 2016. ''')
+                    user_response = input('Enter response:')
+                elif user_response == '3':
+                    vis3 = alt.Chart(coffee).mark_bar().encode(
+                        alt.X('Percentage_Harvested:Q', title = 'Percentage coffee harvested'),
+                        alt.Y('Name:N')
+                        ).properties(
+                        width = 800,
+                        height = 400,
+                        title = 'Percentage Coffee Harvested Per Municiaplity In 2016'
+                        ).encode(
+                        tooltip = [alt.Tooltip('Percentage_Harvested:Q', title = 'Percentage coffee harvested')]
+                        )
+                    vis3.save('vis3.html')
+                    webbrowser.open_new_tab(r'C:\python_workfolder\si507\final_project\vis3.html')
+                    print('''\nChoose another visualization you'd like to see or "exit" or "back":\n1. Top Coffee Production Municipalities in Puerto Rico 2016\n2. Coffee Harvested vs. Coffee Planted in 2016 \n3. Percentage coffee harvested per municpality in 2016. ''')
+                    user_response = input('Enter response:')
+                else:
+                    user_response = input('The input must be the index of the corresponding variable. Please enter a valid option: ')
+                    continue
+            print('\nWould you like to view the socio-economics data or agriculture data?')
+            print("\nPress '1' for agriculture data, press '2' for socio-economics data, or'exit' to exit!")
+            user_response = input('\nEnter response:')
+        elif user_response == '2':
+            print('\n1. Total female population')
+            print('2. Under age 10')
+            print('3. Over age 64')
+            print('4. With a disability')
+            print('5. Poverty status')
+            print('6. Unemployment')
+            print('7. Part time workers')
+            print('8. Renters')
+            print('9. Receive public assistance')
+            print('10. Single parent households')
+            print('11. No vehicle available')
+            print('12. Social vulnerability index')
+            user_response = input('\nPlease enter the index of one of the variables to visualize (note: all data except for the social vulnerability index is in percentiles.) or enter "back": ')
+            while user_response != 'back':
+                try:
+                    user_response = int(user_response)
+                    var = socio_economics_var[user_response-1]
+                except (ValueError, TypeError) as e:
+                    print('\n[Error! Enter a number, "back " or "exit"]')
+                    user_response = input('\nPlease enter the index of one of the variables to visualize (note: all data except for the social vulnerability index is in percentiles.) or enter "back": ')
+                    continue
+                else:
+                    df = pd.read_sql_query("select " + var + ", Name from CENSUS;", conn)
+                    table = pr.merge(df, how = "left", left_on = ['NAME'], right_on=['Name'])
+                    my_map = folium.Map(location=[18.2208, -66.5901], zoom_start=9)
+                    folium.Choropleth(
+                        geo_data=table,
+                        name='choropleth',
+                        data=table,
+                        columns=['Name', var],
+                        key_on='feature.properties.Name',
+                        fill_color='OrRd',
+                        fill_opacity=0.7,
+                        line_opacity=0.2,
+                        legend_name= var
+                        ).add_to(my_map)
+                    my_map.save(r'C:\python_workfolder\si507\final_project\social_score.html')
+                    webbrowser.open_new_tab(r'C:\python_workfolder\si507\final_project\social_score.html')
+
+                    print('''\nChoose another visualization you'd like to see or "exit" or "back":\n''')
+                    print('1. Total female population')
+                    print('2. Under age 10')
+                    print('3. Over age 64')
+                    print('4. With a disability')
+                    print('5. Poverty status')
+                    print('6. Unemployment')
+                    print('7. Part time workers')
+                    print('8. Renters')
+                    print('9. Receive public assistance')
+                    print('10. Single parent households')
+                    print('11. No vehicle available')
+                    print('12. Social vulnerability index\n')
+                    user_response = input('Enter response:')
+                    continue
+
+            print('\nWould you like to view the socio-economics data or agriculture data?')
+            print("\nPress '1' for agriculture data, press '2' for socio-economics data, or'exit' to exit!")
+            user_response = input('\nEnter response:')
+
+        else:
+            user_response = input('Please enter a valid option: ')
+            continue
+    print('\nBye!')
